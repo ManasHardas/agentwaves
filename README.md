@@ -1,192 +1,119 @@
 # agentwaves
 
-A discipline framework for building software with Claude Code (or similar AI orchestration tools) using **dispatched specialist agents** organized in **wave-cadence** phases.
+A discipline framework for orchestrating **dispatched specialist agents** through **wave-cadence** phases in Claude Code (or any agent harness with a comparable dispatch primitive).
 
-Extracted from a real production project that ran 19+ sessions across 8 phases, shipping ~50 PRs through the pattern with calibrated reviewer composition rules, budget watchdogs, and operating-mode discipline.
+agentwaves answers a different question from most Claude Code skill collections: **how do you keep multi-agent dispatch coherent across a multi-month, multi-phase, multi-session production roadmap?** It models the *lifecycle* — phases, waves, session handoffs, budget watchdogs, calibration — not just a single feature workflow.
 
 ---
-
-## What this is
-
-A copy-into-your-project template containing:
-
-- **`agents/`** — generic role docs for 11 specialist agents (orchestrator, PM, PM-Designer, Code Review, Security, SRE, Backend, Frontend, Infra, QA, Docs)
-- **`dispatch-templates/`** — 4 permanent dispatch-brief clauses extracted from real-project retrospectives:
-  - Clause #3: test-file-in-initial-commit
-  - Clause #6: reviewer-trio composition (default-keep / default-prune rules)
-  - HARD CONSTRAINT: verification environment (no `docker cp` / `docker exec` mutation)
-  - Close-keyword convention (one `Closes #N` per line for bundled PRs)
-- **`templates/`** — empty starter files for `wave-state.md`, `capacity-log.md`, `velocity.json`, `phase-spec.md`, `implementation-plan.md`, `next-session.md` (Session Handoff Document)
-- **`scripts/`** — read-only checklist printers for session-start + session-close
-- **`CLAUDE.md.snippet`** — paste this into your project's `CLAUDE.md` to encode operating-mode rules
-
-## What this is NOT
-
-- A code generator. The agents don't write themselves; you orchestrate them via `Agent` tool calls in your Claude Code session.
-- A framework that runs autonomously. Human (you) approves session budget, picks operating mode, escalates on blockers.
-- Tied to any specific tech stack. Patterns work for FastAPI/Next.js, Django/React, or any backend+frontend split. Replace `<api-routes-dir>`, `<frontend-app-dir>` etc. with your project's paths.
 
 ## The wave cadence
 
-Every phase runs through 5 waves:
-
 ```
-Wave 0    — Contract Freeze        (Orchestrator alone)
-Wave 0.5  — Issue Planning         (Backend + Frontend + Infra agents in parallel)
-Wave 1    — Build (loop)           (Specialist agents per filed issue)
-Wave 2    — QA                     (QA agent)
-Wave 3    — Phase close            (Docs agent + tag + roadmap update)
+Wave 0    — Contract Freeze              (orchestrator alone)
+Wave 0.5  — Issue Planning               (Backend + Frontend + Infra in parallel)
+Wave 1    — Build (loop)                 (specialist agents per filed issue)
+Wave 2    — QA                           (QA agent: planning pass + build loop)
+Wave 3    — Phase close                  (Docs agent + tag + roadmap update)
+Wave 3.5  — Dogfood pass                 (real-data end-to-end exercise)
 ```
 
-Wave 0 + Wave 0.5 produce the **filed-issue ready-set** that drives Wave 1 build dispatch. Skipping Wave 0.5 (orchestrator synthesizing dispatch briefs from memory instead of from filed issues) was the discipline-failure mode that motivated codifying these rules.
+Wave 0 + Wave 0.5 produce the **filed-issue ready-set** that drives Wave 1 build dispatch. The orchestrator never synthesizes dispatch briefs from memory; every Wave 1 dispatch references a filed GitHub issue. This is the discipline-failure mode the framework most aggressively defends against.
 
-## Specialist agents (11 roles)
-
-| Role | Writes | Reviews | File |
-|---|---|---|---|
-| **Orchestrator** | Contracts, glue, merges | Everything, final call | `agents/orchestrator.md` |
-| **PM (Stage 2)** | Velocity log, capacity log, wave-state | n/a | `agents/pm.md` |
-| **PM / Designer** | Nothing | User-visible PRs + phase-spec sanity check | `agents/pm-designer.md` |
-| **Code Review** | Nothing | Every Wave 1 build PR | `agents/code-review.md` |
-| **Security** | Narrow security fixes | Auth-pathway + new-attack-surface PRs | `agents/security.md` |
-| **SRE** | Instrumentation, retry decorators | Worker + external-API PRs | `agents/sre.md` |
-| **Backend** | API routes, services, workers, models | n/a | `agents/backend.md` |
-| **Frontend** | App routes, components, lib | n/a | `agents/frontend.md` |
-| **Infra** | Compose, Dockerfiles, CI, scripts | n/a | `agents/infra.md` |
-| **QA** | Test files | n/a | `agents/qa.md` |
-| **Docs** | README, CHANGELOG, runbooks | n/a | `agents/docs.md` |
-
-## Session Handoff Document (SHD) protocol — saves 65-95k per session-start
-
-PM at every session-close regenerates `plans/next-session.md` — a single self-contained playbook for the next session. It contains:
-
-- Quick-context (phase, wave, mode, last SHA, carry-over slots, open blockers)
-- Active priors digest (compressed `velocity.json` table)
-- **Pre-rendered slot 1 dispatch brief** (verbatim — orchestrator paste-dispatches without synthesis)
-- Slot 2-N compressed briefs (issue numbers + class + anchor + reviewer composition)
-- Watchdogs (T-A / T-G / T-D thresholds)
-- Stop conditions
-- User-override section (paste deltas after the resume message)
-
-At the next session-start, orchestrator reads ONLY `next-session.md` and executes. **No PM dispatch needed at session-start.** Legacy session-start ritual saved 100-140k of overhead; SHD protocol cuts that to 5-15k. **Net savings: 65-95k per session.**
-
-If `next-session.md` is missing (fresh project) or stale (older than the latest merged PR), orchestrator falls back to `wave-state.md` + legacy ritual.
-
-`plans/wave-state.md` remains authoritative. `next-session.md` is a CACHE optimized for fast bootstrap — if they conflict, `wave-state.md` wins.
-
-See `agents/pm.md` §Session Handoff Document protocol for the full structure + maintenance rules.
-
-## Operating modes — ACTIVE vs DEGRADED
-
-Real-project retrospective revealed that `PM-skip mode` (orchestrator self-plans without dispatched PM) is valid for narrow-fix sibling-shape sessions but DANGEROUS for sessions introducing new contract surfaces. The rule:
-
-**ACTIVE mode is REQUIRED if ANY of:**
-- New phase boundary
-- New contract surface introduction (new endpoints, tables, external API integration)
-- >1-issue scope synthesis required (work not yet decomposed into filed GH issues)
-- Unresolved fix-cycle from prior session
-- First-of-class novel surface (no prior data point for the class)
-
-**DEGRADED is allowed ONLY when ALL:**
-- All planned slots are narrow-fix or sibling-shape
-- All issues filed before session start
-- No new contract artifacts
-- Last session closed cleanly
-
-This rule is encoded in:
-1. `agents/orchestrator.md` §Session-start ritual
-2. `CLAUDE.md.snippet` (auto-loaded into every conversation context)
-
-## Environment variables
-
-Two prefixes are used for project-tunable knobs:
-
-- **`AW_*`** — protocol-wide knobs that change orchestration behavior. Recognized by agents (orchestrator, PM, etc.) when declared in the session-start ritual or read from your shell environment.
-- **`GUARDRAIL_*`** — knobs specific to `scripts/check-session-close-guardrails.sh`. Activate or gate specific guardrail checks.
-
-| Variable | Prefix | Default | What it does |
-|---|---|---|---|
-| `AW_CI_QUOTA_CONSTRAINED` | AW | unset (off) | When set to `1`, opts the session into the CI-quota-constrained operating sub-mode (see `dispatch-templates/ci-quota-constrained-mode.md`). Documented behavior: `[skip ci]` on every commit + admin-merge + label-gate expensive jobs (e.g. `run-e2e`). Declare in the chore-close commit body when active. |
-| `GUARDRAIL_CC_SESSION_GATE` | GUARDRAIL | `99999` (off) | Minimum session number from which the `cc_session_id` invariant in the guardrails script is enforced. Set to a small N (e.g. `1`) if your harness exposes a session id from session 1; set to a later N if you adopted session-ids partway through the project. |
-
-**Adding a new knob.** Use `AW_*` for cross-protocol behavior, `GUARDRAIL_*` for guardrails-script-specific gates. Document it in this table with: default value, what it does, when to set it. Project-specific knobs that don't generalize belong in your project's own env namespace, not here.
+Full operating manual: [`agents/orchestrator.md`](agents/orchestrator.md).
 
 ---
 
-## Adoption guide
+## What's in the box
 
-### 1. Clone into your project
+| Path | What it contains |
+|---|---|
+| [`agents/`](agents/) | 11 specialist role docs: orchestrator, PM, PM-Designer, Code Review, Security, SRE, Backend, Frontend, Infra, QA, Docs |
+| [`dispatch-templates/`](dispatch-templates/README.md) | Permanent + conditional dispatch-brief clauses (test-file-in-initial-commit, reviewer-trio composition, verification environment, close-keyword convention, CI-quota-constrained mode) |
+| [`templates/`](templates/) | Starter files for `wave-state.md`, `capacity-log.md`, `velocity.json`, `phase-spec.md`, `next-session.md` (SHD), `runbook.md` |
+| [`scripts/`](scripts/README.md) | Session-start checklist printer, session-close checklist printer, and the session-close guardrails enforcement script (17 invariants) |
+| [`CLAUDE.md.snippet`](CLAUDE.md.snippet) | Paste into your project's `CLAUDE.md` to auto-load operating-mode rules into every conversation |
 
-```bash
-cd <your-project>
-git submodule add https://github.com/<your-username>/agentwaves .orchestrator
-# OR plain copy:
-git clone https://github.com/<your-username>/agentwaves .orchestrator
-```
+### Key sub-documents
 
-### 2. Customize agent files for your stack
+- [Session Handoff Document protocol](agents/pm.md#session-handoff-document-shd-protocol--plansnext-sessionmd) — cross-session memory in one file; ~65-95k saved per session-start
+- [Operating modes: ACTIVE vs DEGRADED](agents/orchestrator.md#session-start-ritual-permanent-clause) — when full PM discipline is required vs. when PM-skip is safe
+- [Coordination watchdogs T-M / T-X / T-Y](agents/pm.md#coordination-watchdogs-t-m--t-x--t-y) — module-drift / parallel-lane-overlap / post-merge-issue-closure
+- [Budget watchdogs T-A / T-G / T-D](agents/pm.md#budget-watchdogs-t-a--t-g--t-d) — cumulative-budget / slot-anchor-drift / fix-cycle-stop
+- [Environment variables](#environment-variables) — `AW_*` for protocol-wide knobs, `GUARDRAIL_*` for guardrails-script knobs
 
-Open each `agents/*.md` and replace placeholders:
+---
 
-- `<api-routes-dir>` → your project's API route directory (e.g., `backend/api/`)
-- `<services-dir>` → e.g., `backend/services/`
-- `<workers-dir>` → e.g., `backend/workers/`
-- `<frontend-app-dir>` → e.g., `frontend/app/`
-- `<api-codegen-output>` → e.g., `frontend/lib/api/generated.ts`
-- `<migrations-versions-dir>` → e.g., `backend/alembic/versions/`
-- `<full-stack-up-command>` → e.g., `docker compose up --build`
+## How agentwaves compares
 
-Search for `<placeholder>` style strings and adapt them.
+agentwaves sits in a different layer from the other major Claude Code frameworks. They're not mutually exclusive — agentwaves coexists with Superpowers (e.g. using `superpowers:brainstorming` for pre-Wave-0 ideation) and is orthogonal to GSD's context-engineering and gstack's role-governance.
 
-### 3. Initialize wave state + velocity log
+| Dimension | **agentwaves** | **[Superpowers](https://github.com/obra/superpowers)** | **[GSD (Get Shit Done)](https://github.com/gsd-build/get-shit-done)** | **[gstack](https://github.com/gstack-build)** |
+|---|---|---|---|---|
+| **What it constrains** | Dispatch sequencing of specialist agents through phase-cadence waves | The development process within a feature (mandatory phase gates) | The execution environment (fresh context per task) | Decision-making perspective (which role you're acting as) |
+| **Primary problem solved** | Coherence of multi-agent dispatch across a multi-session, multi-phase roadmap | Lack of methodology / ad-hoc development | Context-window degradation ("context rot") on large work | Unclear decision authority for solo founder-engineers |
+| **Core abstraction** | Phase + wave + filed-issue + specialist-agent dispatch | Composable skills with mandatory triggers | Atomic tasks each receiving a fresh 200k context | Role-bound slash commands (CEO, EM, designer, QA, …) |
+| **Workflow shape** | Wave 0 → 0.5 → 1 → 2 → 3 → 3.5, per phase, per session | Brainstorm → Spec → Plan → TDD → Subagent Dev → Review → Finalize | Plan → Execute (parallel waves) → Verify → Ship | Think → Plan → Build → Review → Ship |
+| **Multi-agent dispatch model** | 11 named specialist roles with explicit scope fences; orchestrator-led with parallel-within-wave + sequential-across-waves | Subagent-driven-development skill; agents invoked per phase | Atomic tasks dispatched to fresh subagents | Role-skills invoked sequentially; no parallel dispatch primitive |
+| **Cross-session state** | `wave-state.md` (authoritative) + `next-session.md` (SHD cache) + `velocity.json` + `capacity-log.md` | None built-in; per-session | `PROJECT.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, `CONTEXT.md`, `.planning/config.json` | None built-in; relies on git + role-output chaining |
+| **Budget / token discipline** | T-A/T-G/T-D budget watchdogs + T-M/T-X/T-Y coordination watchdogs + per-class velocity model with Bayesian update | None (process-focused, not budget-focused) | Avoids the problem structurally via fresh contexts | None explicit |
+| **Quality gates** | Dispatch-template clauses: test-file-in-initial-commit, reviewer-trio composition (5 default-keep / default-prune rules), verification environment HARD CONSTRAINT, close-keyword convention | Mandatory TDD (RED-GREEN-REFACTOR; deletes code written before tests) | Manual verify phase | `/review` and `/ship` skills at end of pipeline |
+| **Session-close enforcement** | `scripts/check-session-close-guardrails.sh` — 17 invariants enforced as BLOCKER (exit 1) or WARN (exit 2) | n/a | n/a | n/a |
+| **Operating modes** | ACTIVE (full PM discipline) vs DEGRADED (PM-skip; allowed only when ALL narrow-fix conditions hold) | n/a | n/a | n/a |
+| **Calibration** | `velocity.json` per-class observations → Bayesian update of priors over time | n/a | n/a | n/a |
+| **Project lifecycle target** | Multi-month, multi-phase production roadmap (8+ phases, 50+ PRs typical) | Single feature / single bugfix | Single complex project that exceeds one context window | Solo founder-engineer wearing multiple hats |
+| **Installation** | Copy/submodule the repo into your project; paste `CLAUDE.md.snippet` | `/plugin install superpowers@claude-plugins-official` | `npx get-shit-done-cc@latest` | Slash-command skills installed individually |
+| **Composability with the others** | Coexists with Superpowers (use its brainstorming/TDD skills inside Wave 1); orthogonal to GSD/gstack | Composable; agentwaves uses it for pre-Wave-0 ideation | Composable | Composable |
+| **What it deliberately is NOT** | A code generator; a within-session methodology; a single-implementer pattern | A multi-session roadmap framework; a budget tracker | A multi-agent dispatch system | A multi-session roadmap framework |
 
-```bash
-cp .orchestrator/templates/wave-state.md plans/wave-state.md
-cp .orchestrator/templates/capacity-log.md plans/capacity-log.md
-cp .orchestrator/templates/velocity.json plans/velocity.json
-```
+**Short version:** Superpowers gives you discipline *within* a feature. GSD gives you clean *context* per atomic task. gstack gives you a *role* to think from. agentwaves gives you the *dispatch + lifecycle scaffolding* to coordinate many specialist agents across many sessions toward a shipped product.
 
-Edit `plans/wave-state.md` to reflect your project's starting state (phase 1, wave 0, no carry-over).
+If you're solo and shipping a single feature, Superpowers is the right tool. If your project keeps blowing through context windows, GSD is the right tool. If you're a founder doing both eng and product, gstack is the right tool. If you're running a multi-phase roadmap with parallel specialist-agent dispatch and you need cross-session memory + budget discipline + reviewer-trio calibration, that's what agentwaves was extracted to solve.
 
-### 4. Paste the operating-mode rules into your CLAUDE.md
+---
 
-```bash
-cat .orchestrator/CLAUDE.md.snippet >> .claude/CLAUDE.md
-# OR (project-level):
-cat .orchestrator/CLAUDE.md.snippet >> CLAUDE.md
-```
+## Adoption
 
-### 5. Mark scripts executable
+Three steps:
 
-```bash
-chmod +x .orchestrator/scripts/*.sh
-```
+1. **Clone or submodule** the repo into your project as `.orchestrator/` (or any path you prefer).
+2. **Customize placeholders** in `agents/*.md` for your stack (search for `<api-routes-dir>`, `<frontend-app-dir>`, `<migrations-versions-dir>`, etc.).
+3. **Paste [`CLAUDE.md.snippet`](CLAUDE.md.snippet)** into your project's `CLAUDE.md` to auto-load operating-mode rules into every Claude Code session.
 
-### 6. First orchestrator session
+Then in a fresh Claude Code conversation in your project's directory:
 
-In a fresh Claude Code conversation in your project's directory:
+> Read `.orchestrator/agents/orchestrator.md`. We're starting Phase 1 of `<project>`. I'll be the user; you're the Orchestrator. Run the Session-start ritual.
 
-> Read `.orchestrator/agents/orchestrator.md`. We're starting Phase 1 of <project>. I'll be the user; you're the Orchestrator. Run the Session-start ritual.
+---
 
-Claude reads the role + checks wave-state + asks you for budget + decides ACTIVE/DEGRADED + proposes next activities. Wave 0 contract-freeze writing happens; Wave 0.5 dispatches Backend/Frontend/Infra in parallel to decompose into issues; Wave 1 dispatches per filed issue.
+## Environment variables
 
-### 7. Refine priors as you go
+| Variable | Prefix | Default | Effect |
+|---|---|---|---|
+| `AW_CI_QUOTA_CONSTRAINED` | `AW_*` (protocol-wide) | unset | When `1`, activates the [CI-quota-constrained mode](dispatch-templates/ci-quota-constrained-mode.md) (skip-CI-on-every-commit + admin-merge + label-gate expensive jobs) |
+| `GUARDRAIL_CC_SESSION_GATE` | `GUARDRAIL_*` (guardrails-script) | `99999` (off) | Minimum session number from which the `cc_session_id` invariant is enforced |
 
-`agents/pm.md` ships with bootstrap priors (sibling-cache-warm 50-65k, first-of-class 75-90k, etc.). After ~10-15 PRs in your project, PM should regenerate the table from `velocity.json` actuals. The bootstrap priors are starting points, not gospel.
+`AW_*` is for cross-protocol knobs; `GUARDRAIL_*` is for guardrails-script-specific gates. Add new knobs to whichever scope they belong to.
 
-## How to NOT use this
-
-- **Don't try to use it on a single-implementer-no-Claude project.** The patterns assume specialist-agent dispatch is the build mechanism. Without that, the wave cadence over-scopes.
-- **Don't run agents in parallel without independent scope.** "Parallel within a wave" only works for files-don't-overlap dispatches. Two backend agents touching the same router file = merge conflicts.
-- **Don't skip Wave 0.5.** Orchestrator-synthesized dispatch briefs (no filed-issue intermediate) consistently produce 50-100k token fix-cycle taxes. Filed issues = scope checkpoint = no synthesis bugs.
-- **Don't run PM-skip mode for first-of-class slots.** See ACTIVE vs DEGRADED rules above.
-
-## License
-
-MIT. See LICENSE.
+---
 
 ## Provenance
 
-Pattern extracted 2026-04-28 from a real project that ran 19 sessions across 8 phases, shipping ~50 PRs through the pattern with calibrated reviewer composition rules. Names and project-specific examples genericized for cross-project reuse.
+agentwaves was extracted from a real production project that ran enough phases, sessions, and PRs through the wave-cadence pattern for the failure modes to surface, retrospect, and harden into rules.
 
-The S18 dispatch-brief-accuracy collapse retrospective (where PM-skip was wrongly applied to a session introducing new pages, producing 4 PM-D Blockers + 68k fix-cycle tax) is the clearest single source for why the operating-mode discipline matters. That retrospective is encoded in `agents/orchestrator.md` §Session-start ritual.
+What that looks like in concrete terms:
+
+- The **operating-mode rule** (ACTIVE vs DEGRADED) exists because PM-skip was wrongly applied to a session introducing new contract surfaces; the orchestrator-synthesized dispatch brief conflated already-shipped endpoints with future ones, the reviewer agents fired multiple Blockers, and a substantial fix-cycle tax was paid in tokens that should have been spent on feature work. The retro produced the rule; the rule was promoted to a permanent clause in both the orchestrator role doc and the auto-loaded `CLAUDE.md` snippet.
+- The **session-close guardrails script** exists because 8 of its 17 invariants drifted silently across a multi-phase stretch. Velocity-log rollups stopped happening, SHDs grew stale, working trees shipped with uncommitted state — none of which surface in normal development because agents follow stale memory and the spec keeps living in the doc unaltered. The script makes that drift impossible to miss at close-time.
+- The **reviewer-trio composition matrix** exists because dispatching the wrong reviewer set either over-burns budget (full trio on a narrow-fix sibling) or escapes Blockers (CR-only on an endpoint with new HTTP attack surface). The default-keep / default-prune bifurcations were calibrated across many sessions of paired observation, with zero escaped Security findings on Security-pruned slots in the validation window.
+- The **SHD protocol** (`plans/next-session.md`) exists because the legacy session-start ritual — re-derive priors at session-start, dispatch PM for capacity planning, then dispatch the first real slot — was paying 100-140k tokens per session-start for context the prior session already knew. Pre-rendering the playbook at session-close cut that overhead to 5-15k.
+- The **coordination watchdogs T-M / T-X / T-Y** exist because plan-template references silently went stale, parallel-lane file overlaps silently produced merge conflicts, and post-merge auto-close silently fired on wrong issues. Each was caught and made into a pre-dispatch / post-merge ritual after the failure was named.
+
+Every clause in `dispatch-templates/` traces back to a specific recurring failure mode with a measured token cost. The framework is not aspirational; it is the residue of mistakes that hurt enough to encode.
+
+Names, paths, session numbers, and project-specific examples have been genericized for cross-project reuse. The discipline itself is what's portable.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
