@@ -26,3 +26,23 @@ ACTIVE mode is REQUIRED if ANY of the above conditions fails. ACTIVE mode requir
 **`scripts/check-session-close-guardrails.sh` MUST run before the chore-close commit.** Exit 1 = BLOCKER, stop and fix; exit 2 = WARN, acknowledge each warn-line in the chore-close commit body; exit 0 = clean, proceed. Enforces 17 invariants: velocity.json rollup completeness (one `pr_merge` row per build PR), wave-state.md currency, SHD presence for S<N+1>, capacity-log.md entry, clean working tree, clean worktrees, cc_session_id presence (when your harness exposes one), stale-branch cleanup, operating-mode + watchdog declarations in close commit, etc. Cost ~5s + ~200-300 tokens per session; +5-10k with GitHub API checks for issue/branch verification.
 
 Catches the silent execution drift from non-negotiable spec invariants that is invisible during normal development — agents follow stale memory; the spec keeps living in the doc unaltered until someone runs a retrospective and notices the gap. **No bypass** — file an issue against the script if a check is wrong; do not skip the gate. See `.orchestrator/agents/orchestrator.md` §Session-close ritual + `.orchestrator/agents/pm.md` §Session close step 5.
+
+## Skill-output gitignore recommendations (conditional)
+
+If your harness ships the `superpowers:brainstorming` skill (or similar skills that run a localhost preview server), the skill writes a transient output cache to `.superpowers/brainstorm/<session-id>/` containing HTML preview files plus a `state/` directory with server PIDs and logs. This is ephemeral per-session data — add to your `.gitignore`:
+
+```
+# Superpowers skill output cache (transient, per-session)
+.superpowers/
+```
+
+Only relevant if you use these skills. Skip if your harness doesn't ship them.
+
+## Project-tunable knobs (env vars)
+
+Two env-var prefixes are recognized:
+
+- **`AW_*`** — protocol-wide knobs that change orchestration behavior (e.g. `AW_CI_QUOTA_CONSTRAINED=1` activates the CI-quota-constrained operating sub-mode).
+- **`GUARDRAIL_*`** — knobs specific to `scripts/check-session-close-guardrails.sh` (e.g. `GUARDRAIL_CC_SESSION_GATE=<N>` enables the cc_session_id invariant from session N).
+
+See `.orchestrator/README.md` §Environment variables for the full table.

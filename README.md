@@ -97,6 +97,22 @@ This rule is encoded in:
 1. `agents/orchestrator.md` §Session-start ritual
 2. `CLAUDE.md.snippet` (auto-loaded into every conversation context)
 
+## Environment variables
+
+Two prefixes are used for project-tunable knobs:
+
+- **`AW_*`** — protocol-wide knobs that change orchestration behavior. Recognized by agents (orchestrator, PM, etc.) when declared in the session-start ritual or read from your shell environment.
+- **`GUARDRAIL_*`** — knobs specific to `scripts/check-session-close-guardrails.sh`. Activate or gate specific guardrail checks.
+
+| Variable | Prefix | Default | What it does |
+|---|---|---|---|
+| `AW_CI_QUOTA_CONSTRAINED` | AW | unset (off) | When set to `1`, opts the session into the CI-quota-constrained operating sub-mode (see `dispatch-templates/ci-quota-constrained-mode.md`). Documented behavior: `[skip ci]` on every commit + admin-merge + label-gate expensive jobs (e.g. `run-e2e`). Declare in the chore-close commit body when active. |
+| `GUARDRAIL_CC_SESSION_GATE` | GUARDRAIL | `99999` (off) | Minimum session number from which the `cc_session_id` invariant in the guardrails script is enforced. Set to a small N (e.g. `1`) if your harness exposes a session id from session 1; set to a later N if you adopted session-ids partway through the project. |
+
+**Adding a new knob.** Use `AW_*` for cross-protocol behavior, `GUARDRAIL_*` for guardrails-script-specific gates. Document it in this table with: default value, what it does, when to set it. Project-specific knobs that don't generalize belong in your project's own env namespace, not here.
+
+---
+
 ## Adoption guide
 
 ### 1. Clone into your project

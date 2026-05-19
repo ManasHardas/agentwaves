@@ -136,6 +136,10 @@ Every build-agent dispatch brief MUST include these clauses verbatim:
 
 These are PERMANENT clauses; do not omit them on any build-agent dispatch. They were extracted from real-project retrospectives where omission cost 50-100k tokens per affected PR via fix-cycles.
 
+**Conditional clauses (env-var-gated):**
+
+- **CI-quota-constrained mode** (`dispatch-templates/ci-quota-constrained-mode.md`) — include verbatim ONLY when `AW_CI_QUOTA_CONSTRAINED=1`. See `README.md` §Environment variables for the full list of project-tunable knobs.
+
 ---
 
 ## Dispatch patterns (Agent tool)

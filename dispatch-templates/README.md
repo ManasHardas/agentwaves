@@ -7,7 +7,8 @@ Permanent clauses that orchestrator MUST include verbatim in every build-agent d
 | `clause-3-test-file-in-initial-commit.md` | Backend impl PRs MUST include test file in INITIAL commit covering ≥70% of new lines | Post-merge fix-cycle to add tests after diff-cover gate fails (~70-100k token tax per affected PR) |
 | `clause-6-reviewer-trio-composition.md` | Default-keep / default-prune rules for which reviewers fire on which PR class | Over-reviewing (wasted tokens) on narrow fixes; under-reviewing (escaped Blockers) on novel surfaces |
 | `hard-constraint-verification-environment.md` | Verify on host or `docker compose run --rm`; never `docker cp`/`docker exec` to mutate running containers | Image-built artifact mutations that don't survive image rebuild; verification-via-running-container that misses real bugs |
-| `close-keyword-convention.md` | `Closes #N` on its own line; one per line for bundled PRs | GitHub auto-close keyword fails to match `Closes #40 + #41` syntax — leaves issues stale-open |
+| `close-keyword-convention.md` | `Closes #N` on its own line; one per line for bundled PRs; no close-keywords in narrative prose; no spurious `(#N)` in PR titles | GitHub auto-close keyword fails to match bundled syntax (leaves issues stale-open) or fires *spuriously* on narrative `fixes #N` / title `(#N)` references |
+| `ci-quota-constrained-mode.md` (env-var-gated) | When `AW_CI_QUOTA_CONSTRAINED=1`: `[skip ci]` on every commit + admin-merge + label-gate expensive jobs | Exhausting CI minutes mid-session via 5–10× CI runs per draft PR; opaque "all workflows failing in <10s" billing-blocked state |
 
 ## How to compose into a dispatch brief
 

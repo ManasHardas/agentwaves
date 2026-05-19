@@ -207,6 +207,10 @@ Initial per-kind estimates (placeholder; refine with each project's real observa
 |---|---|---|---|
 | pm-designer | phase-sanity-check | 60-75k | n/a |
 | orchestrator | contract-freeze | 200-250k | n/a |
+| backend | wave-0.5-issue-planning | `<placeholder>` | n/a |
+| frontend | wave-0.5-issue-planning | `<placeholder>` | n/a |
+| infra | wave-0.5-issue-planning | `<placeholder>` | n/a |
+| qa | wave-2-issue-planning | `<placeholder>` | n/a |
 | backend | service-module | 55k | 20k |
 | backend | endpoint | 45k | 15k |
 | backend | worker-stages | 70k | 25k |
@@ -224,6 +228,10 @@ Initial per-kind estimates (placeholder; refine with each project's real observa
 | pm-designer | review-round | 50-60k | n/a |
 
 PM treats these as priors; Bayesian-update with each real observation. After ~10-20 PRs through Wave 1, PM regenerates the table from actual data and the priors carry less weight.
+
+**Wave-0.5-issue-planning rows are intentionally `<placeholder>`.** Calibrate them from your first Wave 0.5 dispatch — record each agent's `tokens_total` from the `<usage>` block when it returns its decomposition. Typical first-Wave-0.5 observation for medium-sized phases falls in the per-agent 70-130k range; the 3-agent-parallel rollup runs 250-450k for medium-to-large phases. Record actual observations rather than copying any external project's anchor numbers.
+
+**`wave-2-issue-planning`** is the QA Wave 2 §0 planning pass (see `agents/qa.md`). Single-agent dispatch; rolls into ~150-200k for medium phases. Refine from your first Wave 2 observation.
 
 ---
 
